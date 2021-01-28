@@ -1,0 +1,547 @@
+= Agility Lab - using Terraform to deploy BIG-IP v15 with 3 nics
+
+
+== Requirements
+For reference check the link below
+
+----
+"https://www.terraform.io/docs/configuration-0-11/interpolation.html"
+----
+
+== Files
+This plan is split with every topic
+
+* firewall
+* BIG-IP
+* output
+* main
+* networks
+* nics
+* dpasswd
+* storage
+* ts
+* az
+* variables
+* terraform.tfvars.examples
+
+Pretty much all options are in variables.
+
+IMPORTANT: License Agreement with Microsoft Azure Market
+
+== License steps
+For the BYOL in Azure to be able to use BIG-IP you much accept the term before you can deploy the BIG-IP / BIG-IQ.
+Here is the working solution for the BIG-IP.
+
+** 1  => install the az CLI +
+** 2  => login into Microsoft Azure cloud from the CLI +
+** 3  => select or set the right account which you want to use to deploy the BIG-IP +
+** 4  => create the RBAC for your subscription
+
+STEPS:
+----
+brew install azure-cli  # for mac
+
+Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile .\AzureCLI.msi; Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet'; rm .\AzureCLI.msi # Powershell
+
+# For CentOS / RHEL 7
+sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+
+sudo sh -c 'echo -e "[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
+
+sudo yum -y install azure-cli
+
+#Ubuntu use this link
+https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-apt?view=azure-cli-latest
+----
+
+Azure Login
+----
+az login
+----
+
+This will open a new browser window for you. If you are using a virtual machine it will not work!
+Once you are done with the browser the cli will show the account like
+
+----
+> az login
+You have logged in. Now let us find all the subscriptions to which you have access...
+The following tenants don't contain accessible subscriptions. Use 'az login --allow-no-subscriptions' to have tenant level access.
+xxxxxxxxxx0-xxxxxxxx
+[
+  {
+    "cloudName": "AzureCloud",
+    "homeTenantId": "YOURTENANTNUMBER",
+    "id": "YOURACCONTID",
+    "isDefault": true,
+    "managedByTenants": [
+      {
+        "tenantId": "YOURTENANTNUMBER"
+      }
+    ],
+    "name": "YOUR SUB NAME",
+    "state": "Enabled",
+    "tenantId": "YOURTENANTID",
+    "user": {
+      "name": "youremailaddress@me.com",
+      "type": "user"
+    }
+  }
+]
+----
+
+If you have more than one account set the right account with the set account
+----
+SUBSCRIPTION="xxxxxxxxxxx"
+az account set -s "${SUBSCRIPTION}"
+----
+
+
+Run the RBAC command
+----
+az vm image terms accept --plan "f5-bigiq-virtual-edition-byol" --offer "f5-big-ip-best" --publisher "f5-networks"
+----
+
+Changes the terraform.tfvars to set to your name and IP subnet/network you want to use and what resource name. In mine it shows like this:
+
+----
+> az group list --output table |grep agility
+33601e-agility-westus2_remo_rg               westus2         Succeeded
+----
+
+== Execute the manifest
+
+Set the Plan output
+----
+terraform plan -out=tfplan_bigip
+----
+
+Execute the Plan
+----
+terraform apply tfplan_bigip
+----
+
+== Connecting to BIG-IP
+The output will show the mgmt IP address, the FQDN and the secondary IP address. Therefore, you can use either to ssh into the BIG-IP.
+
+----
+ssh admin@fqdn
+----
+
+
+== Password ADMIN has been generated
+The TF output will have the password which was generated for the admin and for the agility user
+
+Access the Web using either IP or FQDN
+----
+https://FQDN
+----
+
+DONE!!
+
+
+== Ansible
+It will create a creds file which will have the IP and the password generated from the Terraform.
+
+The ansible will set the following:
+
+POOL
+NODE
+Virtual Server IP
+The playbook will use the secondary IP of the Untrust NIC, if you use the Azure LB you will to use the primary NIC and not the secondary.
+
+
+== Telemetry
+It allows you to get BIG-IP telemetry in Azure Sentinel. By default we configure only the utalization of the BIG-IP. For ASM, we will need to add an AS3 declaration.
+
+== DNS Name
+It will automatically map to the DNS Record of Azure mapping records. The DNS FQDN will have a 5 characters randomly generated plus the FQDN name in the variable file.  
+
+== Troubleshooting
+Login in to the BIG-IP and check the following files in the /var/log folder:
+
+====
+cloud-init.log
+
+cloud-init-output.log
+
+f5-cloud-init.log
+====
+
+
+
+== LAB
+
+Login into the WINDOWS Jumpbox, using administrator and password is in the details. 
+Once logged in, there is a shortcut for putty (SSH) and you will find centos in the menu to be able to ssh into the box.
+The user is centos, password is f5demo.com. You will not be able to ssh into the box since it only accepts outside ssh connections with ssh keys. 
+
+
+Once you login / ssh into the CentOS machine, in the user's home folder you will see a folder called "agility-lab-terraform-azure-f5", therefore, change into that folder. 
+
+image::lab-architecture.drawio.svg[Lab Overview - architecture]
+----
+cd agility-lab-terraform-azure-f5
+----
+
+verify you are logged into azure by executing az command
+
+----
+az login
+----
+
+If you are not logged in you will need to click on the URL showed into the prompt, and paste the CODE showed to verify the account.
+
+----
+az login
+To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code RHHFR999B to authenticate.
+----
+
+Make a few changes into the terraform variables
+----
+vim variables.tf
+----
+
+And replace the following variable and replace agility with YOURNAME:
+----
+name_rg        = "agility-westus2_demo_rg"
+to
+name_rg        = "YOURNAME-westus2_demo_rg"
+----
+
+Initialize Terraform
+
+----
+terraform init
+----
+
+Run the terraform plan
+----
+terraform plan
+----
+
+Verify the output of the plan, once you spent a few min to read and see the plan, run the next terraform command
+
+Deploy BIG-IP now
+
+----
+terraform apply -auto-approve
+----
+
+Once it's complete it will show the output of the FQDN, MGMT IP address, Password, as well as the Secondary IP address (SelfIP for BIG-IP)  which will be used for the VIP.
+
+Example output:
+
+----
+Genereated_Password = "ze?3iXldknek#Bq]upzG9L7x"
+Secondary_Untrust_IPs = [
+  "20.51.123.137",
+]
+mgmt_IP_address = [
+  "20.51.122.141",
+]
+mgmt_fqdn = [
+  "kflez-agility0.westus2.cloudapp.azure.com",
+]
+----
+
+
+Once the process is complete run the script to see if the BIG-IP is ready to go
+
+----
+sh runtests.sh 
+----
+
+the output show look as follow:
+
+----
+ sh runtests.sh
+[2021-01-17T06:28:59+00:00] WARN: Input 'fast_version' does not have a value. Use --input-file or --input to provide a value for 'fast_version' or specify a  value with `input('fast_version', value: 'somevalue', ...)`.
+...........
+
+Profile: InSpec Profile (bigip-ready)
+Version: 0.1.0
+Target:  local://
+
+  ✔  bigip-connectivity: BIG-IP is reachable
+     ✔  Host 20.51.122.141 port 443 proto tcp is expected to be reachable
+  ✔  bigip-declarative-onboarding: BIG-IP has Declarative Onboarding
+     ✔  HTTP GET on https://20.51.122.141:443/mgmt/shared/declarative-onboarding/info status is expected to cmp == 200
+     ✔  HTTP GET on https://20.51.122.141:443/mgmt/shared/declarative-onboarding/info headers.Content-Type is expected to match "application/json"
+  ✔  bigip-declarative-onboarding-version: BIG-IP has specified version of Declarative Onboarding
+     ✔  JSON content [0, "version"] is expected to eq "1.15.0"
+  ✔  bigip-application-services: BIG-IP has Application Services
+     ✔  HTTP GET on https://20.51.122.141:443/mgmt/shared/appsvcs/info status is expected to cmp == 200
+     ✔  HTTP GET on https://20.51.122.141:443/mgmt/shared/appsvcs/info headers.Content-Type is expected to match "application/json"
+  ✔  bigip-application-services-version: BIG-IP has specified version of Application Services
+     ✔  JSON content version is expected to eq "3.22.1"
+  ✔  bigip-telemetry-streaming: BIG-IP has Telemetry Streaming
+     ✔  HTTP GET on https://20.51.122.141:443/mgmt/shared/telemetry/info status is expected to cmp == 200
+     ✔  HTTP GET on https://20.51.122.141:443/mgmt/shared/telemetry/info headers.Content-Type is expected to match "application/json"
+  ✔  bigip-telemetry-streaming-version: BIG-IP has specified version of Telemetry Streaming
+     ✔  JSON content version is expected to eq "1.14.0"
+  ✔  bigip-licensed: BIG-IP has an active license
+     ✔  HTTP GET on https://20.51.122.141:443/mgmt/tm/sys/license body is expected to match /registrationKey/
+
+
+Profile: BIG-IP Automation Toolchain readiness (bigip-ready)
+Version: 0.1.0
+Target:  local://
+
+     No tests executed.
+
+Profile Summary: 8 successful controls, 0 control failures, 0 controls skipped
+Test Summary: 11 successful, 0 failures, 0 skipped
+----
+
+=== WINDOWS 
+Now it's time to open browser and go to the FQDN, from the terraform output.
+
+Example:
+
+----
+https://kflez-agility0.westus2.cloudapp.azure.com
+----
+
+Use admin ad username for the BIG-IP and go to Local Traffic. You will see there is no nodes, pools and virtual servers. 
+Now let's check out our SelfIPs. Navigate to Network and check Self IPs. You will notice the following:
+
+----
+external-self
+internal-self
+----
+They have been setup and do have an IP on each different network. Now, let's make sure the Interaces are up and running and check them into the Interfaces, under the Network tag.
+
+=== Ansible
+Now it's time to run the setup for the Nodes, Pools and Virtual Server
+The creds0.yml is generated with the output of Terraform. We will run two playbooks one for the virtual server for http and one for https. 
+Each playbook has tags we will use to remove it later so, we can add and remove using the same playbook. Let's start and 
+
+cd into the ansible folder and execute the following command
+
+----
+ansible-playbook -e creds_file=creds0.yml playbook.yml
+----
+
+The output show show something like this:
+
+----
+PLAY [localhost] **********************************************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ****************************************************************************************************************************************************************************************
+Sunday 17 January 2021  06:58:25 +0000 (0:00:00.110)       0:00:00.110 ********
+Sunday 17 January 2021  06:58:25 +0000 (0:00:00.109)       0:00:00.109 ********
+ok: [localhost]
+
+TASK [Create a pool] ******************************************************************************************************************************************************************************************
+Sunday 17 January 2021  06:58:26 +0000 (0:00:01.112)       0:00:01.223 ********
+Sunday 17 January 2021  06:58:26 +0000 (0:00:01.112)       0:00:01.222 ********
+changed: [localhost]
+
+TASK [Add members to pool] ************************************************************************************************************************************************************************************
+Sunday 17 January 2021  06:58:28 +0000 (0:00:01.480)       0:00:02.703 ********
+Sunday 17 January 2021  06:58:28 +0000 (0:00:01.480)       0:00:02.702 ********
+changed: [localhost] => (item={u'host': u'52.175.223.65', u'name': u'web01'})
+changed: [localhost] => (item={u'host': u'52.191.186.245', u'name': u'web02'})
+
+TASK [Add virtual server] *************************************************************************************************************************************************************************************
+Sunday 17 January 2021  06:58:31 +0000 (0:00:03.629)       0:00:06.332 ********
+Sunday 17 January 2021  06:58:31 +0000 (0:00:03.629)       0:00:06.332 ********
+changed: [localhost]
+
+PLAY RECAP ****************************************************************************************************************************************************************************************************
+localhost                  : ok=4    changed=3    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+Sunday 17 January 2021  06:58:35 +0000 (0:00:04.119)       0:00:10.452 ********
+===============================================================================
+bigip_virtual_server ---------------------------------------------------- 4.12s
+bigip_pool_member ------------------------------------------------------- 3.63s
+bigip_pool -------------------------------------------------------------- 1.48s
+gather_facts ------------------------------------------------------------ 1.11s
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+total ------------------------------------------------------------------ 10.34s
+Sunday 17 January 2021  06:58:35 +0000 (0:00:04.119)       0:00:10.451 ********
+===============================================================================
+Add virtual server ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 4.12s
+Add members to pool ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ 3.63s
+Create a pool ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ 1.48s
+Gathering Facts ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 1.11s
+Playbook run took 0 days, 0 hours, 0 minutes, 10 seconds
+----
+
+Now let's make sure we can hit the VIP
+
+We will first find out the IP we will need for out LB, which does the balance two web servers. We can get this from the terraform output. The output is marked as Secondary IP. 
+
+We will run a loop and will get response from both servers. 
+Run the following:
+
+----
+terraform output
+----
+
+Cop the Secondary IP and replace the one in this script which is 20.51.124.40 with the output of your deployment.
+
+----
+for i in $(seq 100); do curl http://20.51.124.40; done
+----
+
+the output of the above is
+
+----
+This is a Demo Page
+This is a Demo Page
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"><html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+		<title>Apache HTTP Server Test Page powered by CentOS</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <!-- Bootstrap -->
+    <link href="/noindex/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="noindex/css/open-sans.css" type="text/css" />
+
+<style type="text/css"><!--
+<snip>
+----
+
+As you can see, we hit the first server with the response of This is a Demo Page, and the second server is just a raw output. 
+
+Now we will add the https virtual server. We will run same ansible playbook but will use the https.yml playbook. So make sure you are in the ansible directory and run: 
+
+----
+ansible-playbook -e creds_file=creds0.yml https.yml
+----
+
+Output
+
+----
+PLAY [localhost] **********************************************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ****************************************************************************************************************************************************************************************
+Sunday 17 January 2021  07:14:53 +0000 (0:00:00.057)       0:00:00.057 ********
+Sunday 17 January 2021  07:14:53 +0000 (0:00:00.056)       0:00:00.056 ********
+ok: [localhost]
+
+TASK [Create client SSL profile] ******************************************************************************************************************************************************************************
+Sunday 17 January 2021  07:14:54 +0000 (0:00:00.904)       0:00:00.961 ********
+Sunday 17 January 2021  07:14:54 +0000 (0:00:00.904)       0:00:00.961 ********
+changed: [localhost]
+
+TASK [Add HTTPS virtual server] *******************************************************************************************************************************************************************************
+Sunday 17 January 2021  07:14:56 +0000 (0:00:01.284)       0:00:02.246 ********
+Sunday 17 January 2021  07:14:56 +0000 (0:00:01.284)       0:00:02.246 ********
+changed: [localhost]
+
+PLAY RECAP ****************************************************************************************************************************************************************************************************
+localhost                  : ok=3    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+Sunday 17 January 2021  07:15:02 +0000 (0:00:05.903)       0:00:08.149 ********
+===============================================================================
+bigip_virtual_server ---------------------------------------------------- 5.90s
+bigip_profile_client_ssl ------------------------------------------------ 1.28s
+gather_facts ------------------------------------------------------------ 0.90s
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+total ------------------------------------------------------------------- 8.09s
+Sunday 17 January 2021  07:15:02 +0000 (0:00:05.903)       0:00:08.149 ********
+===============================================================================
+Add HTTPS virtual server ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 5.90s
+Create client SSL profile ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ 1.28s
+Gathering Facts ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 0.90s
+Playbook run took 0 days, 0 hours, 0 minutes, 8 seconds
+----
+
+Now let's test the https:
+Run the following loop, and as before, we will need to use the secondary IP, in my example you will need to replace my 20.51.124.40 with the one you have in your terraform output, under Secondary IP. 
+
+----
+❯ for i in $(seq 5); do curl -k  https://20.51.124.40; done
+----
+
+The output is going to be the same as the one we got from http. 
+
+
+=== Remove https virtual server using the same https playbook
+Because ansible runs top down, to remove we will need to reverse this and run from bottom up. Therefore, we will use the tags. 
+
+Now we will first remove the virtual server with the following:
+
+----
+ansible-playbook -e creds_file=creds0.yml https.yml --tags ssl_vs -e present_state=absent
+----
+
+OUTPUT
+
+----
+PLAY [localhost] **********************************************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ****************************************************************************************************************************************************************************************
+Sunday 17 January 2021  07:22:17 +0000 (0:00:00.058)       0:00:00.058 ********
+Sunday 17 January 2021  07:22:17 +0000 (0:00:00.058)       0:00:00.058 ********
+ok: [localhost]
+
+TASK [Add HTTPS virtual server] *******************************************************************************************************************************************************************************
+Sunday 17 January 2021  07:22:18 +0000 (0:00:00.961)       0:00:01.019 ********
+Sunday 17 January 2021  07:22:18 +0000 (0:00:00.961)       0:00:01.019 ********
+changed: [localhost]
+
+PLAY RECAP ****************************************************************************************************************************************************************************************************
+localhost                  : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+Sunday 17 January 2021  07:22:19 +0000 (0:00:01.658)       0:00:02.678 ********
+===============================================================================
+bigip_virtual_server ---------------------------------------------------- 1.66s
+gather_facts ------------------------------------------------------------ 0.96s
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+total ------------------------------------------------------------------- 2.62s
+Sunday 17 January 2021  07:22:19 +0000 (0:00:01.658)       0:00:02.677 ********
+===============================================================================
+Add HTTPS virtual server ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 1.66s
+Gathering Facts ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 0.96s
+Playbook run took 0 days, 0 hours, 0 minutes, 2 seconds
+
+----
+
+Now we will first remove the ssl profile with the following:
+
+----
+❯ ansible-playbook -e creds_file=creds0.yml https.yml --tags ssl_profile  -e present_state=absent
+----
+
+OUTPUT
+
+----
+PLAY [localhost] **********************************************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ****************************************************************************************************************************************************************************************
+Sunday 17 January 2021  07:22:39 +0000 (0:00:00.057)       0:00:00.057 ********
+Sunday 17 January 2021  07:22:39 +0000 (0:00:00.056)       0:00:00.056 ********
+ok: [localhost]
+
+TASK [Create client SSL profile] ******************************************************************************************************************************************************************************
+Sunday 17 January 2021  07:22:39 +0000 (0:00:00.899)       0:00:00.957 ********
+Sunday 17 January 2021  07:22:39 +0000 (0:00:00.899)       0:00:00.956 ********
+changed: [localhost]
+
+PLAY RECAP ****************************************************************************************************************************************************************************************************
+localhost                  : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+Sunday 17 January 2021  07:22:41 +0000 (0:00:01.620)       0:00:02.578 ********
+===============================================================================
+bigip_profile_client_ssl ------------------------------------------------ 1.62s
+gather_facts ------------------------------------------------------------ 0.90s
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+total ------------------------------------------------------------------- 2.52s
+Sunday 17 January 2021  07:22:41 +0000 (0:00:01.621)       0:00:02.578 ********
+===============================================================================
+Create client SSL profile ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ 1.62s
+Gathering Facts ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 0.90s
+Playbook run took 0 days, 0 hours, 0 minutes, 2 seconds
+----
+
+Check the BIG-IP and you will see the virtual server is not there any longer, and the curl will not work if we are going to try it using the https address. 
+
+

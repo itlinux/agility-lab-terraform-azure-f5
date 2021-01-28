@@ -1,0 +1,118 @@
+#cloud-config
+write_files:
+- content: |
+    #!/bin/bash
+
+      echo "This is installation is done with cloud-init configured by remo@f5.com" >> /var/tmp/cloud-init-output
+
+    # Wait for MCPD to be up before running tmsh commands
+      source /usr/lib/bigstart/bigip-ready-functions
+      wait_bigip_ready
+
+        #  Begin BIG-IP configuration
+        tmsh modify /sys global-settings mgmt-dhcp disabled
+        tmsh modify /sys global-settings gui-setup disabled
+        tmsh modify /sys sshd banner enabled banner-text 'Configured via Automation. All Sessions will be recorded!'
+        tmsh modify /sys global-settings gui-security-banner-text 'Configured via Automation!'
+        tmsh modify analytics global-settings \{ offbox-protocol tcp offbox-tcp-addresses add \{ 127.0.0.1 \} offbox-tcp-port 6514 use-offbox enabled \}
+        tmsh save /sys config
+
+  path: /config/custom-config.sh
+  permissions: '0755'
+  owner: root:root
+  append: true
+- content:
+    path: /var/tmp/bootcmd_end
+    owner: root:root
+    permissions: '0644'
+runcmd:
+  - /config/custom-config.sh &
+tmos_declared:
+  enabled: true
+  icontrollx_trusted_sources: false
+  icontrollx_package_urls:
+    - ${DO_URL}
+    - ${AS3_URL}
+    - ${TS_URL}
+    - ${FAST_URL}
+
+  do_declaration:
+    schemaVersion: 1.0.0
+    class: Device
+    async: true
+    label: Cloudinit Onboarding
+    Common:
+      class: Tenant
+      hostname: ${bigip_hostname}
+      provisioningLevels:
+        class: Provision
+        ltm: nominal
+        avr: minimum
+      poolLicense:
+        class: License
+        licenseType: licensePool
+        bigIqHost: ${bigiq_license_host}
+        bigIqUsername: ${bigiq_license_username}
+        bigIqPassword: ${bigiq_license_password}
+        licensePool: ${bigiq_license_licensepool}
+        skuKeyword1: ${bigiq_license_skuKeyword1}
+        skuKeyword2: ${bigiq_license_skuKeyword2}
+        unitOfMeasure: ${bigiq_license_unitOfMeasure}
+        hypervisor: ${bigiq_hypervisor}
+        overwrite: true
+        reachable: false
+        bigIpUsername:  ${bigipuser}
+        bigIpPassword: ${bigippass}
+      dnsServers:
+        class: DNS
+        nameServers:
+          - ${name_servers}
+        search:
+          - ${search_domain}
+      ntpServers:
+        class: NTP
+        servers:
+          - 0.pool.ntp.org
+          - 1.pool.ntp.org
+          - 2.pool.ntp.org
+      admin:
+        class: User
+        shell: bash
+        userType: regular
+      dbvars:
+        class: DbVariables
+        ui.advisory.enabled: true
+        ui.advisory.color: orange
+        ui.advisory.text: This device is managed via automation.
+      internal:
+        class: VLAN
+        mtu: 1450
+        interfaces:
+          - name: 1.2
+            tagged: false
+      internal-self:
+        class: SelfIp
+        address: "${internal_ip}/24"
+        vlan: internal
+        allowService: default
+        trafficGroup: traffic-group-local-only
+      external:
+        class: VLAN
+        mtu: 1450
+        interfaces:
+          - name: 1.1
+            tagged: false
+      external-self:
+        class: SelfIp
+        address: "${external_ip}/24"
+        vlan: external
+        allowService: none
+        trafficGroup: traffic-group-local-only
+      default:
+        class: Route
+        gw: "${default_gw}"
+        network: default
+        mtu: 1500
+  post_onboard_enabled: true
+  post_onboard_commands:
+    - "echo 'curl -s http://monitors.internal.local/rebooted' >> /config/startup"
